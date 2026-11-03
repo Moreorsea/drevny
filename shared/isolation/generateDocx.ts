@@ -161,16 +161,18 @@ function titleRow(title: string): TableRow {
 }
 
 function dataRow(row: ProtocolDataRow): TableRow {
-  const resistances = row.resistances ?? Array.from({ length: 10 }, () => '')
+  const resistances = row.resistances ?? Array.from({ length: 10 }, () => '-')
+  const dash = (value: string | undefined) => (value == null || value === '' ? '-' : value)
   return new TableRow({
     children: [
-      cell(row.index != null ? String(row.index) : '', { width: COL_WIDTHS[0] }),
+      // Без измерений сквозной № не ставится — прочерк вместо пустой ячейки
+      cell(row.index != null ? String(row.index) : '-', { width: COL_WIDTHS[0] }),
       cell(row.name ?? '', { width: COL_WIDTHS[1], center: false }),
-      cell(row.cable ?? '', { width: COL_WIDTHS[2] }),
-      cell(row.voltage ?? '', { width: COL_WIDTHS[3] }),
-      cell(row.allowed ?? '', { width: COL_WIDTHS[4] }),
-      ...resistances.map((v, i) => cell(v, { width: COL_WIDTHS[5 + i]! })),
-      cell(row.compliance ?? '', { width: COL_WIDTHS[15] })
+      cell(dash(row.cable), { width: COL_WIDTHS[2] }),
+      cell(dash(row.voltage), { width: COL_WIDTHS[3] }),
+      cell(dash(row.allowed), { width: COL_WIDTHS[4] }),
+      ...resistances.map((v, i) => cell(dash(v), { width: COL_WIDTHS[5 + i]! })),
+      cell(dash(row.compliance), { width: COL_WIDTHS[15] })
     ]
   })
 }
