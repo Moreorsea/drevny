@@ -1,0 +1,33 @@
+{
+  "name": "chyinya_for_old_man",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck",
+    "smoke": "node scripts/smoke.mjs",
+    "generate": "nuxt generate",
+    "deploy": "npm run generate"
+  },
+  "dependencies": {
+    "@iconify-json/lucide": "^1.2.147",
+    "@iconify-json/simple-icons": "^1.2.100",
+    "@nuxt/ui": "^4.12.0",
+    "docx": "^9.15.2",
+    "exceljs": "^4.4.0",
+    "nuxt": "^4.6.3",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^1.17.0",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.13.0",
+    "eslint-plugin-better-tailwindcss": "^4.10.0",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.3.13"
+  }
+}
