@@ -22,9 +22,13 @@ const BORDERS = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER }
 const FONT_SIZE = 18
 const FONT = 'Times New Roman'
 
-/** A4 landscape: 297 × 210 mm */
-const PAGE_WIDTH = convertMillimetersToTwip(297)
-const PAGE_HEIGHT = convertMillimetersToTwip(210)
+/**
+ * A4 paper in portrait measures (docx swaps them when orientation is LANDSCAPE).
+ * Resulting OOXML matches Word: w=297mm h=210mm orient="landscape"
+ * (see изол.docx: w="16838" h="11906" w:orient="landscape").
+ */
+const PAGE_WIDTH = convertMillimetersToTwip(210)
+const PAGE_HEIGHT = convertMillimetersToTwip(297)
 const TABLE_WIDTH = convertMillimetersToTwip(277)
 
 const COL_WIDTHS = [
@@ -84,7 +88,6 @@ function buildDocument(result: ProtocolResult) {
       {
         properties: {
           page: {
-            // A4 landscape. `docx` stores 210×297 + w:orient="landscape" (OOXML).
             size: {
               orientation: PageOrientation.LANDSCAPE,
               width: PAGE_WIDTH,
