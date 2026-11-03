@@ -180,16 +180,16 @@ function processLine(
   }
 
   // Линии без кабеля (нет марки в яч5) всё равно попадают в протокол,
-  // но без сквозного № и без измерений — по ТЗ.
+  // но без сквозного №; в ячейках измерений — прочерки.
   if (!hasCable(line)) {
     return {
       kind: 'data',
       name: buildLineName(line),
-      cable: '',
-      voltage: '',
-      allowed: '',
-      resistances: Array.from({ length: 10 }, () => ''),
-      compliance: ''
+      cable: '-',
+      voltage: '-',
+      allowed: '-',
+      resistances: Array.from({ length: 10 }, () => '-'),
+      compliance: '-'
     }
   }
 
