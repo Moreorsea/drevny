@@ -15,109 +15,66 @@ import {
 } from 'docx'
 import type { ProtocolDataRow, ProtocolResult } from './types'
 
-const BORDER = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
+/** Matches изол.docx: tblBorders sz="8" (1pt) */
+const BORDER = { style: BorderStyle.SINGLE, size: 8, color: '000000' }
 const BORDERS = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER }
 
-/** 9pt in docx half-points */
+/** 9pt in docx half-points — as in изол.docx */
 const FONT_SIZE = 18
 const FONT = 'Times New Roman'
 
 /**
  * A4 paper in portrait measures (docx swaps them when orientation is LANDSCAPE).
- * Resulting OOXML matches Word: w=297mm h=210mm orient="landscape"
- * (see изол.docx: w="16838" h="11906" w:orient="landscape").
+ * Resulting OOXML: w≈16838 h≈11906 orient="landscape" — same as изол.docx.
  */
 const PAGE_WIDTH = convertMillimetersToTwip(210)
 const PAGE_HEIGHT = convertMillimetersToTwip(297)
-const TABLE_WIDTH = convertMillimetersToTwip(277)
 
+/**
+ * Page margins from изол.docx pgMar:
+ * top/right/bottom = 720 twips (12.7 mm), left = 1440 twips (25.4 mm)
+ */
+const MARGIN_TOP = 720
+const MARGIN_RIGHT = 720
+const MARGIN_BOTTOM = 720
+const MARGIN_LEFT = 1440
+
+/**
+ * Exact column widths from изол.docx w:tblGrid (sum = 14715).
+ */
 const COL_WIDTHS = [
-  convertMillimetersToTwip(10),
-  convertMillimetersToTwip(42),
-  convertMillimetersToTwip(36),
-  convertMillimetersToTwip(16),
-  convertMillimetersToTwip(18),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(16),
-  convertMillimetersToTwip(16),
-  convertMillimetersToTwip(16),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(14),
-  convertMillimetersToTwip(19)
+  511, // №
+  3032, // наименование
+  1697, // марка кабеля
+  870, // напряжение
+  1140, // допустимое
+  646, 646, 646, 646, 646, 646, 646, 646, 646, 646, // сопротивления
+  1005 // соотв.
 ]
 
-function buildDocument(result: ProtocolResult) {
-  const bodyRows: TableRow[] = [
-    ...headerRows(),
-    ...result.rows.map(r => (r.kind === 'title' ? titleRow(r.title || '') : dataRow(r)))
-  ]
+const TABLE_WIDTH = COL_WIDTHS.reduce((a, b) => a + b, 0)
 
-  const mainTable = new Table({
-    width: { size: TABLE_WIDTH, type: WidthType.DXA },
-    columnWidths: COL_WIDTHS,
-    rows: bodyRows
-  })
+const ZERO_CELL_MARGINS = {
+  top: 0,
+  bottom: 0,
+  left: 0,
+  right: 0
+}
 
-  const conclusion = new Paragraph({
-    spacing: { before: 240 },
-    children: [
-      new TextRun({
-        text: `Заключение: ${result.conclusion}`,
-        font: FONT,
-        size: FONT_SIZE
-      })
-    ]
-  })
-
-  return new Document({
-    styles: {
-      default: {
-        document: {
-          run: {
-            font: FONT,
-            size: FONT_SIZE
-          }
-        }
-      }
-    },
-    sections: [
-      {
-        properties: {
-          page: {
-            size: {
-              orientation: PageOrientation.LANDSCAPE,
-              width: PAGE_WIDTH,
-              height: PAGE_HEIGHT
-            },
-            margin: {
-              top: convertMillimetersToTwip(10),
-              bottom: convertMillimetersToTwip(10),
-              left: convertMillimetersToTwip(10),
-              right: convertMillimetersToTwip(10)
-            }
-          }
-        },
-        children: [mainTable, conclusion]
-      }
-    ]
+function run(text: string, opts?: { bold?: boolean }) {
+  return new TextRun({
+    text,
+    bold: opts?.bold,
+    size: FONT_SIZE,
+    font: FONT
   })
 }
 
 function para(content: string, opts?: { bold?: boolean, center?: boolean }) {
   return new Paragraph({
     alignment: opts?.center === false ? AlignmentType.LEFT : AlignmentType.CENTER,
-    children: [
-      new TextRun({
-        text: content,
-        bold: opts?.bold,
-        size: FONT_SIZE,
-        font: FONT
-      })
-    ]
+    spacing: { before: 0, after: 0, line: 240 },
+    children: [run(content, { bold: opts?.bold })]
   })
 }
 
@@ -140,6 +97,7 @@ function cell(
     columnSpan: opts?.columnSpan,
     rowSpan: opts?.rowSpan,
     width: { size: opts?.width ?? 800, type: WidthType.DXA },
+    margins: ZERO_CELL_MARGINS,
     verticalAlign: VerticalAlign.CENTER,
     children: paragraphs
   })
@@ -179,7 +137,7 @@ function headerRows(): TableRow[] {
         width: COL_WIDTHS.slice(5, 15).reduce((a, b) => a + b, 0),
         bold: true
       }),
-      cell('Соотв. нормам', { rowSpan: 2, width: COL_WIDTHS[15], bold: true })
+      cell(lines(['Соотв.', 'нормам']), { rowSpan: 2, width: COL_WIDTHS[15] })
     ]
   })
 
@@ -196,7 +154,7 @@ function titleRow(title: string): TableRow {
   return new TableRow({
     children: [
       cell('', { width: COL_WIDTHS[0] }),
-      cell(title, { width: COL_WIDTHS[1], bold: true }),
+      cell(title, { width: COL_WIDTHS[1], bold: true, center: false }),
       ...COL_WIDTHS.slice(2).map(w => cell('', { width: w }))
     ]
   })
@@ -213,6 +171,63 @@ function dataRow(row: ProtocolDataRow): TableRow {
       cell(row.allowed ?? '', { width: COL_WIDTHS[4] }),
       ...resistances.map((v, i) => cell(v, { width: COL_WIDTHS[5 + i]! })),
       cell(row.compliance ?? '', { width: COL_WIDTHS[15] })
+    ]
+  })
+}
+
+function buildDocument(result: ProtocolResult) {
+  const bodyRows: TableRow[] = [
+    ...headerRows(),
+    ...result.rows.map(r => (r.kind === 'title' ? titleRow(r.title || '') : dataRow(r)))
+  ]
+
+  const mainTable = new Table({
+    width: { size: TABLE_WIDTH, type: WidthType.DXA },
+    columnWidths: COL_WIDTHS,
+    alignment: AlignmentType.CENTER,
+    rows: bodyRows
+  })
+
+  const conclusion = new Paragraph({
+    spacing: { before: 200, after: 0, line: 240 },
+    children: [
+      run('Заключение: ', { bold: true }),
+      run(result.conclusion)
+    ]
+  })
+
+  return new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: FONT,
+            size: FONT_SIZE
+          }
+        }
+      }
+    },
+    sections: [
+      {
+        properties: {
+          page: {
+            size: {
+              orientation: PageOrientation.LANDSCAPE,
+              width: PAGE_WIDTH,
+              height: PAGE_HEIGHT
+            },
+            margin: {
+              top: MARGIN_TOP,
+              right: MARGIN_RIGHT,
+              bottom: MARGIN_BOTTOM,
+              left: MARGIN_LEFT,
+              header: 0,
+              footer: 305
+            }
+          }
+        },
+        children: [mainTable, conclusion]
+      }
     ]
   })
 }
