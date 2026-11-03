@@ -179,9 +179,18 @@ function processLine(
     return { kind: 'title', title: line.title || buildLineName(line) }
   }
 
+  // Линии без кабеля (нет марки в яч5) всё равно попадают в протокол,
+  // но без сквозного № и без измерений — по ТЗ.
   if (!hasCable(line)) {
-    // Lines without cable are omitted from the protocol table
-    return null
+    return {
+      kind: 'data',
+      name: buildLineName(line),
+      cable: '',
+      voltage: '',
+      allowed: '',
+      resistances: Array.from({ length: 10 }, () => ''),
+      compliance: ''
+    }
   }
 
   const sys = findSysRange(sysRanges, line.section)
