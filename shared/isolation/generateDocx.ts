@@ -17,6 +17,14 @@ import type { ProtocolDataRow, ProtocolResult } from './types'
 
 const BORDER = { style: BorderStyle.SINGLE, size: 4, color: '000000' }
 const BORDERS = { top: BORDER, bottom: BORDER, left: BORDER, right: BORDER }
+
+/** 9pt in docx half-points */
+const FONT_SIZE = 18
+const FONT = 'Times New Roman'
+
+/** A4 landscape: 297 × 210 mm */
+const PAGE_WIDTH = convertMillimetersToTwip(297)
+const PAGE_HEIGHT = convertMillimetersToTwip(210)
 const TABLE_WIDTH = convertMillimetersToTwip(277)
 
 const COL_WIDTHS = [
@@ -55,21 +63,32 @@ function buildDocument(result: ProtocolResult) {
     children: [
       new TextRun({
         text: `Заключение: ${result.conclusion}`,
-        font: 'Times New Roman',
-        size: 20
+        font: FONT,
+        size: FONT_SIZE
       })
     ]
   })
 
   return new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: FONT,
+            size: FONT_SIZE
+          }
+        }
+      }
+    },
     sections: [
       {
         properties: {
           page: {
+            // A4 landscape. `docx` stores 210×297 + w:orient="landscape" (OOXML).
             size: {
               orientation: PageOrientation.LANDSCAPE,
-              width: convertMillimetersToTwip(297),
-              height: convertMillimetersToTwip(210)
+              width: PAGE_WIDTH,
+              height: PAGE_HEIGHT
             },
             margin: {
               top: convertMillimetersToTwip(10),
@@ -85,15 +104,15 @@ function buildDocument(result: ProtocolResult) {
   })
 }
 
-function para(content: string, opts?: { bold?: boolean, size?: number, center?: boolean }) {
+function para(content: string, opts?: { bold?: boolean, center?: boolean }) {
   return new Paragraph({
     alignment: opts?.center === false ? AlignmentType.LEFT : AlignmentType.CENTER,
     children: [
       new TextRun({
         text: content,
         bold: opts?.bold,
-        size: opts?.size ?? 14,
-        font: 'Times New Roman'
+        size: FONT_SIZE,
+        font: FONT
       })
     ]
   })
@@ -124,7 +143,7 @@ function cell(
 }
 
 function lines(items: string[], bold = true): Paragraph[] {
-  return items.map(line => para(line, { bold, size: 12 }))
+  return items.map(line => para(line, { bold }))
 }
 
 function headerRows(): TableRow[] {
