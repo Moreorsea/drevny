@@ -1,5 +1,12 @@
 import ExcelJS from 'exceljs'
-import type { ParsedWorkbook, ShieldLine, ShieldSheet, SysIsolationRange } from './types'
+import type {
+  ParsedWorkbook,
+  ShieldLine,
+  ShieldSheet,
+  SysIsolationRange,
+  SysLoopKRange,
+  SysTripCurve
+} from './types'
 import { normalizeNumberString, parseNumber } from './numbers'
 
 const EXCLUDED_SHEETS = new Set(['sys', 'Осн. инфо', 'ОБРАЗЕЦ', 'осн. инфо', 'образец'])
@@ -27,13 +34,6 @@ function isExcludedSheet(name: string): boolean {
   return EXCLUDED_SHEETS.has(name.trim()) || EXCLUDED_SHEETS.has(name.trim().toLowerCase())
 }
 
-/**
- * Section bands from sys!H:
- *   ..1.5      → (−∞; 1.5]
- *   1.5..2.5   → (1.5; 2.5]
- *   10..16     → (10; 16)
- *   16..       → [16; +∞)
- */
 function parseSectionBound(
   raw: string,
   nextIsOpenEnded: boolean
@@ -69,6 +69,21 @@ function parseMomRange(raw: string): { momMin: number, momMax: number } {
   return { momMin: 100, momMax: 100 }
 }
 
+function parseDotRange(raw: string): { min: number, max: number } | null {
+  const s = normalizeNumberString(raw)
+  const m = s.match(/^(\d+(?:\.\d+)?)\.\.(\d+(?:\.\d+)?)$/)
+  if (m) return { min: Number(m[1]), max: Number(m[2]) }
+  if (s.startsWith('..')) {
+    const max = parseNumber(s.slice(2))
+    return max === null ? null : { min: Number.NEGATIVE_INFINITY, max }
+  }
+  if (s.endsWith('..')) {
+    const min = parseNumber(s.slice(0, -2))
+    return min === null ? null : { min, max: Number.POSITIVE_INFINITY }
+  }
+  return null
+}
+
 export function parseSysRanges(sheet: ExcelJS.Worksheet): SysIsolationRange[] {
   const rows: { sectionRaw: string, voltage: number, momRaw: string }[] = []
   for (let r = 13; r <= 17; r++) {
@@ -90,6 +105,45 @@ export function parseSysRanges(sheet: ExcelJS.Worksheet): SysIsolationRange[] {
       voltage: row.voltage,
       momMin: mom.momMin,
       momMax: mom.momMax
+    }
+  })
+}
+
+export function parseTripCurves(sheet: ExcelJS.Worksheet): SysTripCurve[] {
+  const curves: SysTripCurve[] = []
+  for (let r = 19; r <= 21; r++) {
+    const letters = cellText(sheet.getCell(r, 8).value)
+    const displayLetter = cellText(sheet.getCell(r, 9).value)
+    const rangeRaw = cellText(sheet.getCell(r, 10).value)
+    if (!letters || !displayLetter) continue
+    const range = parseDotRange(rangeRaw)
+    if (!range) continue
+    curves.push({
+      letters,
+      displayLetter,
+      rangeMin: range.min,
+      rangeMax: range.max
+    })
+  }
+  return curves
+}
+
+export function parseLoopKRanges(sheet: ExcelJS.Worksheet): SysLoopKRange[] {
+  const rows: { raw: string, k: number }[] = []
+  for (let r = 24; r <= 28; r++) {
+    const raw = cellText(sheet.getCell(r, 8).value)
+    const k = parseNumber(sheet.getCell(r, 9).value)
+    if (!raw || k === null) continue
+    rows.push({ raw, k })
+  }
+  return rows.map((row, index) => {
+    const nextRaw = rows[index + 1]?.raw || ''
+    const nextIsOpenEnded = normalizeNumberString(nextRaw).endsWith('..')
+    const bounds = parseSectionBound(row.raw, nextIsOpenEnded)
+    return {
+      minExclusive: bounds.minExclusive,
+      maxInclusive: bounds.maxInclusive,
+      k: row.k
     }
   })
 }
@@ -132,11 +186,29 @@ function parseShieldSheet(sheet: ExcelJS.Worksheet): ShieldSheet {
     const cableMark = cellText(row.getCell(5).value)
     const cores = cellText(row.getCell(6).value)
     const section = cellText(row.getCell(7).value)
+    const breakerMark = cellText(row.getCell(8).value)
+    const nominalCurrent = cellText(row.getCell(9).value)
+    const ovv = cellText(row.getCell(10).value)
+    const md = cellText(row.getCell(11).value)
+    const multiplicity = cellText(row.getCell(12).value)
     const isolationHint = cellText(row.getCell(14).value)
+    const loopHint = cellText(row.getCell(17).value)
+    const loopTime = cellText(row.getCell(18).value)
 
     const probe = [col1, col2, col3, phase, cableMark, cores, section]
     if (isHeaderRow(probe)) return
-    if (probe.every(v => !v) && !isolationHint) return
+    if (probe.every(v => !v) && !isolationHint && !loopHint && !breakerMark) return
+
+    const extra = {
+      breakerMark,
+      nominalCurrent,
+      ovv,
+      md,
+      multiplicity,
+      isolationHint,
+      loopHint,
+      loopTime
+    }
 
     if (isTitleRow(col1, col2, col3, cableMark, phase, cores)) {
       lines.push({
@@ -150,12 +222,12 @@ function parseShieldSheet(sheet: ExcelJS.Worksheet): ShieldSheet {
         cableMark,
         cores,
         section,
-        isolationHint
+        ...extra
       })
       return
     }
 
-    if (!col1 && !col2 && !cableMark) return
+    if (!col1 && !col2 && !cableMark && !breakerMark) return
 
     lines.push({
       excelRow: rowNumber,
@@ -167,7 +239,7 @@ function parseShieldSheet(sheet: ExcelJS.Worksheet): ShieldSheet {
       cableMark,
       cores,
       section,
-      isolationHint
+      ...extra
     })
   })
 
@@ -185,6 +257,9 @@ export async function parseWorkbook(data: ArrayBuffer | Uint8Array): Promise<Par
   if (!sysRanges.length) {
     fail('Не удалось прочитать диапазоны изоляции с листа sys (G12:J17)')
   }
+
+  const tripCurves = parseTripCurves(sys)
+  const loopKRanges = parseLoopKRanges(sys)
 
   let shields: ShieldSheet[] = []
   wb.eachSheet((sheet) => {
@@ -205,5 +280,5 @@ export async function parseWorkbook(data: ArrayBuffer | Uint8Array): Promise<Par
     fail('Нет листов со щитами (ожидаются листы кроме sys, «Осн. инфо», «ОБРАЗЕЦ»)')
   }
 
-  return { shields, sysRanges }
+  return { shields, sysRanges, tripCurves, loopKRanges }
 }

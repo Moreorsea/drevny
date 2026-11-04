@@ -12,8 +12,8 @@ useHead({
 })
 
 useSeoMeta({
-  title: 'Протокол изоляции',
-  description: 'Загрузка Excel-шаблона и формирование протокола проверки изоляции в Word'
+  title: 'Генератор протоколов',
+  description: 'Формирование протоколов проверки изоляции и петли фаза-нуль из Excel'
 })
 </script>
 
@@ -29,7 +29,7 @@ useSeoMeta({
             name="i-lucide-file-spreadsheet"
             class="size-5 text-primary"
           />
-          <span>Протокол изоляции</span>
+          <span>Генератор протоколов</span>
         </NuxtLink>
       </template>
 
@@ -45,7 +45,7 @@ useSeoMeta({
     <UFooter>
       <template #left>
         <p class="text-sm text-muted">
-          Excel → протокол проверки изоляции (.docx)
+          Excel → протоколы изоляции и петли фаза-нуль (.docx)
         </p>
       </template>
     </UFooter>
