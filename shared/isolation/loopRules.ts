@@ -100,51 +100,66 @@ interface BaseTripInfo {
   baseMin: number
   baseMax: number
   baseRangeText: string
+  /** false, если нет яч9/яч12 для расчёта — вместо нулей ставим прочерки */
+  validBase: boolean
+}
+
+function tripTypeFromParts(ovv: string, md: string, suffix?: string): string {
+  if (ovv && md && suffix !== undefined && suffix !== '') {
+    return `${ovv}; ${md}-${suffix}`
+  }
+  if (ovv && md) return `${ovv}; ${md}`
+  const prefix = [ovv, md].filter(Boolean).join('; ')
+  if (prefix && suffix) return `${prefix}-${suffix}`
+  return prefix || suffix || '-'
 }
 
 function buildBaseTripInfo(line: ShieldLine, curves: SysTripCurve[]): BaseTripInfo {
   const ovv = line.ovv.trim()
   const md = line.md.trim()
   const mult = line.multiplicity.trim()
-  const nominal = parseNumber(line.nominalCurrent) ?? 0
-
-  const prefix = [ovv, md].filter(Boolean).join('; ')
+  const nominal = parseNumber(line.nominalCurrent)
+  const hasNominal = nominal !== null
   const curve = findTripCurve(curves, mult)
   const multNum = parseNumber(mult)
 
   if (curve) {
     const letter = toCyrillicTripLetter(curve.displayLetter)
-    const tripType = prefix ? `${prefix}-${letter}` : letter
-    // Sample uses "ОВВ; МД-С" with hyphen before letter after MD
-    const tripTypeAlt = prefix.includes(';')
-      ? `${ovv}; ${md}-${letter}`
-      : tripType
+    const tripType = tripTypeFromParts(ovv, md, letter)
+    if (!hasNominal) {
+      return { tripType, baseMin: 0, baseMax: 0, baseRangeText: '-', validBase: false }
+    }
     const baseMin = curve.rangeMin * nominal
     const baseMax = curve.rangeMax * nominal
     return {
-      tripType: ovv && md ? `${ovv}; ${md}-${letter}` : tripTypeAlt,
+      tripType,
       baseMin,
       baseMax,
-      baseRangeText: `${formatPlain(baseMin)} - ${formatPlain(baseMax)}`
+      baseRangeText: `${formatPlain(baseMin)} - ${formatPlain(baseMax)}`,
+      validBase: true
     }
   }
 
   if (multNum !== null && multNum < 80) {
-    const tripType = prefix ? `${prefix}-${multNum}` : String(multNum)
-    const tripFormatted = ovv && md ? `${ovv}; ${md}-${multNum}` : tripType
+    const tripType = tripTypeFromParts(ovv, md, String(multNum))
+    if (!hasNominal) {
+      return { tripType, baseMin: 0, baseMax: 0, baseRangeText: '-', validBase: false }
+    }
     const base = multNum * nominal
     const baseMin = 0.8 * base
     const baseMax = 1.2 * base
     return {
-      tripType: tripFormatted,
+      tripType,
       baseMin,
       baseMax,
-      baseRangeText: `${formatPlain(baseMin)} - ${formatPlain(baseMax)}`
+      baseRangeText: `${formatPlain(baseMin)} - ${formatPlain(baseMax)}`,
+      validBase: true
     }
   }
 
   if (multNum !== null && multNum >= 80) {
-    const tripType = ovv && md ? `${ovv}; ${md}` : prefix
+    // база = яч12, яч9 не нужен
+    const tripType = tripTypeFromParts(ovv, md)
     const base = multNum
     const baseMin = 0.8 * base
     const baseMax = 1.2 * base
@@ -152,16 +167,18 @@ function buildBaseTripInfo(line: ShieldLine, curves: SysTripCurve[]): BaseTripIn
       tripType,
       baseMin,
       baseMax,
-      baseRangeText: `${formatPlain(baseMin)} - ${formatPlain(baseMax)}`
+      baseRangeText: `${formatPlain(baseMin)} - ${formatPlain(baseMax)}`,
+      validBase: true
     }
   }
 
-  // fallback: only ovv/md
+  // нет яч12 (и не буква) — диапазон не считаем
   return {
-    tripType: ovv && md ? `${ovv}; ${md}` : prefix,
+    tripType: tripTypeFromParts(ovv, md),
     baseMin: 0,
     baseMax: 0,
-    baseRangeText: '-'
+    baseRangeText: '-',
+    validBase: false
   }
 }
 
@@ -183,6 +200,10 @@ function parseLoopHint(
 ): HintMode {
   const hint = hintRaw.trim()
   if (!hint) {
+    // без валидной базы не подставляем нули
+    if (!(baseMax > 0)) {
+      return { type: 'fixed', values: [] }
+    }
     const x = baseMax
     const k = findLoopK(kRanges, nominalCurrent)
     const y = x * k
@@ -291,6 +312,11 @@ function generateMeasurements(
   return { cells, currents, compliance }
 }
 
+function dashOr(value: string | undefined | null): string {
+  const v = (value ?? '').trim()
+  return v ? v : '-'
+}
+
 function processLine(
   line: ShieldLine,
   parsed: ParsedWorkbook,
@@ -301,15 +327,20 @@ function processLine(
   }
 
   const base = buildBaseTripInfo(line, parsed.tripCurves)
+  const breakerMark = dashOr(line.breakerMark)
+  const nominalCurrent = dashOr(line.nominalCurrent)
+  const tripType = dashOr(base.tripType)
+  const baseRange = base.validBase ? base.baseRangeText : '-'
 
+  // Нет кабеля (яч5) — измерения прочерки; пустые яч8/9/12 тоже не превращаем в нули
   if (!hasCable(line)) {
     return {
       kind: 'data',
       name: buildLineName(line),
-      breakerMark: line.breakerMark || '-',
-      tripType: base.tripType || '-',
-      nominalCurrent: line.nominalCurrent || '-',
-      baseRange: base.baseRangeText || '-',
+      breakerMark,
+      tripType,
+      nominalCurrent,
+      baseRange,
       measurements: Array.from({ length: 6 }, () => '-'),
       timeLimit: '-',
       timeCurve: '-',
@@ -317,23 +348,47 @@ function processLine(
     }
   }
 
-  const { cells, compliance } = generateMeasurements(line, base.baseMax, parsed.loopKRanges)
+  const hasLoopHint = Boolean(line.loopHint.trim())
   const timeRaw = line.loopTime.trim()
   const timeLimit = timeRaw || '0.4'
   const timeCurve = `<${timeLimit}`
+
+  // Без базы (нет яч9/яч12) и без яч17 — нечего считать, ставим прочерки вместо нулей
+  if (!base.validBase && !hasLoopHint) {
+    return {
+      kind: 'data',
+      index: nextIndex(),
+      name: buildLineName(line),
+      breakerMark,
+      tripType,
+      nominalCurrent,
+      baseRange: '-',
+      measurements: Array.from({ length: 6 }, () => '-'),
+      timeLimit,
+      timeCurve,
+      compliance: '-'
+    }
+  }
+
+  const { cells, compliance } = generateMeasurements(
+    line,
+    base.validBase ? base.baseMax : 0,
+    parsed.loopKRanges
+  )
 
   return {
     kind: 'data',
     index: nextIndex(),
     name: buildLineName(line),
-    breakerMark: line.breakerMark || '-',
-    tripType: base.tripType || '-',
-    nominalCurrent: line.nominalCurrent || '-',
-    baseRange: base.baseRangeText,
+    breakerMark,
+    tripType,
+    nominalCurrent,
+    baseRange,
     measurements: cells,
     timeLimit,
     timeCurve,
-    compliance
+    // Без верхней границы базы «Соотв.» не выводим нулевой порог — прочерк
+    compliance: base.validBase ? compliance : '-'
   }
 }
 
