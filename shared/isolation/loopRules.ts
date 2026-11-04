@@ -351,11 +351,10 @@ function processLine(
   const hasLoopHint = Boolean(line.loopHint.trim())
   const timeRaw = line.loopTime.trim()
 
-  // Без базы (нет яч9/яч12) и без яч17 — нечего считать, ставим прочерки вместо нулей
+  // Без базы (нет яч9/яч12) и без яч17 — нечего считать; без № и с прочерками
   if (!base.validBase && !hasLoopHint) {
     return {
       kind: 'data',
-      index: nextIndex(),
       name: buildLineName(line),
       breakerMark,
       tripType,
@@ -374,7 +373,7 @@ function processLine(
     parsed.loopKRanges
   )
 
-  // Если в 7–12 все прочерки — в 13, 14 и 15 тоже прочерки
+  // Если в 7–12 все прочерки — без №; в 13, 14 и 15 тоже прочерки
   const measurementsDashed = cells.every(v => !v || v === '-')
   let timeLimit = timeRaw || '0.4'
   let timeCurve = `<${timeRaw || '0.4'}`
@@ -388,7 +387,7 @@ function processLine(
 
   return {
     kind: 'data',
-    index: nextIndex(),
+    index: measurementsDashed ? undefined : nextIndex(),
     name: buildLineName(line),
     breakerMark,
     tripType,
