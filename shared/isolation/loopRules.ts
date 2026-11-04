@@ -350,8 +350,11 @@ function processLine(
 
   const hasLoopHint = Boolean(line.loopHint.trim())
   const timeRaw = line.loopTime.trim()
-  const timeLimit = timeRaw || '0.4'
-  const timeCurve = `<${timeLimit}`
+  // яч.13/14: при отсутствии кабеля/характеристик — прочерки;
+  // иначе яч18 или по умолчанию 0.4
+  const useTimeDashes = !base.validBase || !line.breakerMark.trim()
+  const timeLimit = useTimeDashes ? '-' : (timeRaw || '0.4')
+  const timeCurve = useTimeDashes ? '-' : `<${timeRaw || '0.4'}`
 
   // Без базы (нет яч9/яч12) и без яч17 — нечего считать, ставим прочерки вместо нулей
   if (!base.validBase && !hasLoopHint) {
@@ -364,8 +367,8 @@ function processLine(
       nominalCurrent,
       baseRange: '-',
       measurements: Array.from({ length: 6 }, () => '-'),
-      timeLimit,
-      timeCurve,
+      timeLimit: '-',
+      timeCurve: '-',
       compliance: '-'
     }
   }
