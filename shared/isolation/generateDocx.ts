@@ -165,8 +165,8 @@ function dataRow(row: ProtocolDataRow): TableRow {
   const dash = (value: string | undefined) => (value == null || value === '' ? '-' : value)
   return new TableRow({
     children: [
-      // Без измерений сквозной № не ставится — прочерк вместо пустой ячейки
-      cell(row.index != null ? String(row.index) : '-', { width: COL_WIDTHS[0] }),
+      // №: только номер или пусто, без прочерка
+      cell(row.index != null ? String(row.index) : '', { width: COL_WIDTHS[0] }),
       cell(row.name ?? '', { width: COL_WIDTHS[1], center: false }),
       cell(dash(row.cable), { width: COL_WIDTHS[2] }),
       cell(dash(row.voltage), { width: COL_WIDTHS[3] }),

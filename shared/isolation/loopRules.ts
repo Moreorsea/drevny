@@ -350,11 +350,6 @@ function processLine(
 
   const hasLoopHint = Boolean(line.loopHint.trim())
   const timeRaw = line.loopTime.trim()
-  // яч.13/14: при отсутствии кабеля/характеристик — прочерки;
-  // иначе яч18 или по умолчанию 0.4
-  const useTimeDashes = !base.validBase || !line.breakerMark.trim()
-  const timeLimit = useTimeDashes ? '-' : (timeRaw || '0.4')
-  const timeCurve = useTimeDashes ? '-' : `<${timeRaw || '0.4'}`
 
   // Без базы (нет яч9/яч12) и без яч17 — нечего считать, ставим прочерки вместо нулей
   if (!base.validBase && !hasLoopHint) {
@@ -379,6 +374,18 @@ function processLine(
     parsed.loopKRanges
   )
 
+  // Если в 7–12 все прочерки — в 13, 14 и 15 тоже прочерки
+  const measurementsDashed = cells.every(v => !v || v === '-')
+  let timeLimit = timeRaw || '0.4'
+  let timeCurve = `<${timeRaw || '0.4'}`
+  let finalCompliance: string = base.validBase ? compliance : '-'
+
+  if (measurementsDashed || !base.validBase || !line.breakerMark.trim()) {
+    timeLimit = '-'
+    timeCurve = '-'
+    finalCompliance = '-'
+  }
+
   return {
     kind: 'data',
     index: nextIndex(),
@@ -390,8 +397,7 @@ function processLine(
     measurements: cells,
     timeLimit,
     timeCurve,
-    // Без верхней границы базы «Соотв.» не выводим нулевой порог — прочерк
-    compliance: base.validBase ? compliance : '-'
+    compliance: finalCompliance
   }
 }
 

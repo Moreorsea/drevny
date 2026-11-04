@@ -159,7 +159,8 @@ function dataRow(row: LoopDataRow): TableRow {
   const dash = (value: string | undefined) => (value == null || value === '' ? '-' : value)
   return new TableRow({
     children: [
-      cell(row.index != null ? String(row.index) : '-', { width: COL_WIDTHS[0] }),
+      // №: только номер или пусто, без прочерка
+      cell(row.index != null ? String(row.index) : '', { width: COL_WIDTHS[0] }),
       cell(row.name ?? '', { width: COL_WIDTHS[1], center: false }),
       cell(dash(row.breakerMark), { width: COL_WIDTHS[2] }),
       cell(dash(row.tripType), { width: COL_WIDTHS[3] }),
